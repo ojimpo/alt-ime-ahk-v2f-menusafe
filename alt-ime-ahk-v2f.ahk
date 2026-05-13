@@ -144,22 +144,36 @@ GitHubRepoReadme(A_ThisMenuItem, A_ThisMenuItemPos, MyMenu)
     Return
 }
 
-; 上部メニューがアクティブになるのを抑制 / Xbox Game Bar 起動用仮想キーコードとのバッティング回避 (vk07 -> vkFF)
+; メニュー抑止: 通常は Alt 押下時にダミー不要(Outlook 等は Alt up 側で抑止)
+; ただし CATIA V5 (CNEXT.exe) など Alt 押下時点でアクセスキーがフォーカスを奪う
+; レガシー Win32 アプリは Alt down で F24 を先制注入する
 *~LAlt::
 {
-    Send("{Blind}{vkFF}")
+    if WinActive("ahk_exe CNEXT.exe") {
+        Send("{Blind}{F24}")
+    }
+    Return
 }
 *~RAlt::
 {
-    Send("{Blind}{vkFF}")
+    if WinActive("ahk_exe CNEXT.exe") {
+        Send("{Blind}{F24}")
+    }
+    Return
 }
 
 ; 左 Alt 空打ちで IME を OFF
+; Alt up を AHK が握りつぶしている間に F24 を送ると OS には「Alt+F24 のコンボ」に見え、
+; Outlook のリボン起動条件(Alt 単独タップ)が成立しなくなる
 #HotIf !WinActive("ahk_exe mstsc.exe")
 LAlt up::
 {
     if (A_PriorHotkey == "*~LAlt") {
+        Send("{Blind}{F24}")
+        Send("{LAlt up}")
         IME_SET(0)
+    } else {
+        Send("{LAlt up}")
     }
     Return
 }
@@ -170,7 +184,11 @@ LAlt up::
 RAlt up::
 {
     if (A_PriorHotkey == "*~RAlt") {
+        Send("{Blind}{F24}")
+        Send("{RAlt up}")
         IME_SET(1)
+    } else {
+        Send("{RAlt up}")
     }
     Return
 }
