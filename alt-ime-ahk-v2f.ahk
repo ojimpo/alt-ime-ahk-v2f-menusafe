@@ -191,13 +191,3 @@ RAlt up::
 }
 #HotIf
 
-; CapsLock 無効化
-CapsLock::return
-
-#f::
-{
-A_Clipboard := ""
-Send "^c"
-ClipWait(1)
-Run "https://www.google.co.jp/search?q=" A_Clipboard
-}
