@@ -144,21 +144,18 @@ GitHubRepoReadme(A_ThisMenuItem, A_ThisMenuItemPos, MyMenu)
     Return
 }
 
-; メニュー抑止: 通常は Alt 押下時にダミー不要(Outlook 等は Alt up 側で抑止)
-; ただし CATIA V5 (CNEXT.exe) など Alt 押下時点でアクセスキーがフォーカスを奪う
-; レガシー Win32 アプリは Alt down で F24 を先制注入する
+; メニュー抑止: Alt 押下時に F24 を先制注入してメニュー起動条件を破壊
+; F24 はどのアプリでも既定の割り当てが無いので副作用なし
+; (上流 ryobeam/alt-ime-ahk-v2f が vkFF でやろうとしていたのと同じ思想で、
+;  メモ帳・CATIA V5 など Alt down で反応するレガシー Win32 アプリにも有効)
 *~LAlt::
 {
-    if WinActive("ahk_exe CNEXT.exe") {
-        Send("{Blind}{F24}")
-    }
+    Send("{Blind}{F24}")
     Return
 }
 *~RAlt::
 {
-    if WinActive("ahk_exe CNEXT.exe") {
-        Send("{Blind}{F24}")
-    }
+    Send("{Blind}{F24}")
     Return
 }
 
