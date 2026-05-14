@@ -36,13 +36,13 @@ AppName(A_ThisMenuItem, A_ThisMenuItemPos, MyMenu)
 
 CheckForUpdates(A_ThisMenuItem, A_ThisMenuItemPos, MyMenu)
 {
-    Run("https://github.com/nekocodeX/alt-ime-ahk-mod/releases/latest")
+    Run("https://github.com/ojimpo/alt-ime-ahk-v2f-menusafe/releases/latest")
     Return
 }
 
 GitHubRepoReadme(A_ThisMenuItem, A_ThisMenuItemPos, MyMenu)
 {
-    Run("https://github.com/nekocodeX/alt-ime-ahk-mod")
+    Run("https://github.com/ojimpo/alt-ime-ahk-v2f-menusafe")
     Return
 }
 
