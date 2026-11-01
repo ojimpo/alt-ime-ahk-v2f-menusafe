@@ -1,15 +1,22 @@
-# alt-ime-ahk-v2f-menusafe — Deferred Alt 試用版
+# alt-ime-ahk-v2f-menusafe
 
 左右 Alt の単押しで IME OFF / ON、組み合わせでは通常の Alt として動作する AutoHotkey v2 スクリプト。
 
 Alt 押下を保留し、単押しなら Alt をアプリへ一切送らない。F24 / ダミーキーによるメニュー抑制を廃止した。
 Karabiner-Elements の [`to.lazy`](https://karabiner-elements.pqrs.org/docs/json/complex-modifications-manipulator-definition/to/lazy/) と [`to_if_alone`](https://karabiner-elements.pqrs.org/docs/json/complex-modifications-manipulator-definition/to-if-alone/) を参考にしている。Karabiner の全仕様やドライバーを移植したものではない。
 
-## 試し方
+Outlook・Word・Excel・メモ帳・VS Code・CATIA V5 など、Alt 単押しでメニューバーやリボンが起動して IME 切替が効かなくなるアプリで使うことを想定している。
+
+> 2026-11-02 に旧方式（Alt を通して F24 を追加する方式）からこの方式へ置き換えた。旧方式が必要なら `49152df` より前のコミットを参照する。
+
+## 使い方
+
+Git もコンパイルも不要。[AutoHotkey v2](https://www.autohotkey.com/download/) が入っていればよい（v1 では動かない）。
+ZIP で取得する場合は、リポジトリの Code → Download ZIP を展開して使う。
 
 1. 現在起動中の旧 alt-ime / 他の Alt リマップスクリプトを、タスクトレイから終了する。同時起動しない。
 2. このフォルダーの `alt-ime-ahk-v2f-menusafe.ahk` を AutoHotkey v2 で起動する。`DeferredAltCore.ahk` も同じフォルダーに置く。
-3. 下記の操作を確認する。試用中はスタートアップを変更する必要はない。
+3. 下記の操作を確認する。まず手動起動で試し、問題なければ下の「スタートアップに登録する」へ進む。
 
 | 操作 | 動作 |
 | --- | --- |
@@ -24,7 +31,23 @@ Karabiner-Elements の [`to.lazy`](https://karabiner-elements.pqrs.org/docs/json
 
 単押しの上限はスクリプト先頭の `AloneTimeoutMs := 1000` で変更できる。`0` で時間制限なし。時間が経過しても、それだけで Alt を送ることはない。
 
-終了するときはトレイの **終了（元のAlt動作に戻す）** を選ぶ。旧版に戻すには、この試用版を終了してから旧版を起動する。試用版はシステム設定、レジストリ、スタートアップを書き換えない。
+終了するときはトレイの **終了（元のAlt動作に戻す）** を選ぶ。旧版に戻すには、このスクリプトを終了してから旧版を起動する。このスクリプト自体はシステム設定、レジストリ、スタートアップを書き換えない。
+
+## スタートアップに登録する
+
+移動しない場所にフォルダーを置き、`Win+R` → `shell:startup` でスタートアップフォルダーを開いてショートカットを作る。旧 alt-ime のショートカットは外す（同時起動しない）。
+
+- リンク先: `AutoHotkey64.exe`（例: `C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe`）
+- 引数: `alt-ime-ahk-v2f-menusafe.ahk` のフルパス（引用符で囲む）
+- 作業フォルダー: そのスクリプトのフォルダー
+
+ZIP を展開した場合、ファイルに Mark of the Web が付き、Smart App Control 等に起動を止められることがある。その場合は `Get-ChildItem <フォルダー> -Recurse | Unblock-File` で外す。
+
+## 確認状況
+
+- 自動テスト: 下記のとおり。
+- 実機: VS Code、Outlook のメール作成画面で、Alt 単押しによるメニュー起動が出ずに IME が切り替わることを確認済み。
+- 未確認: Acrobat Reader の注釈欄、CATIA V5 の数値入力中の Alt 空打ち。不具合があれば Issue に、アプリとバージョン・入力欄・左右どちらの Alt か・押した順番を添えて報告してほしい。
 
 ## 確認してほしい操作
 
@@ -40,7 +63,7 @@ Karabiner-Elements の [`to.lazy`](https://karabiner-elements.pqrs.org/docs/json
 - 入力送出に失敗した場合はフックを解除して停止し、トレイ通知を出す。再開にはスクリプトを起動し直す。
 - Ctrl+Alt+Del のようなセキュアな操作は通常の入力注入では再現できない。Ctrl を先に押す組み合わせは物理 Alt をそのまま通す。セキュアデスクトップ自体は対象外。
 - ゲーム、Raw Input、他のキーフックとの併用、mstsc 以外のリモート接続クライアントは未検証。
-- IME 操作は従来の `IMEv2.ahk` と同じ `WM_IME_CONTROL / IMC_SETOPENSTATUS` 方式。64-bit HWND を正しく扱い、応答待ちは50msに制限した。各アプリと IME の対応は試用で確認が必要。
+- IME 操作は従来の `IMEv2.ahk` と同じ `WM_IME_CONTROL / IMC_SETOPENSTATUS` 方式。64-bit HWND を正しく扱い、応答待ちは50msに制限した。各アプリと IME の対応は実際に使って確認が必要。
 
 ## 実装とテスト
 
@@ -54,7 +77,7 @@ Karabiner-Elements の [`to.lazy`](https://karabiner-elements.pqrs.org/docs/json
 
 `tests/run.ahk --desktop` を指定すると、一時的なテスト用ウィンドウ3つを開き、左右 Alt+Tab の連続切替、Alt+Shift+Tab の逆方向切替、Alt 解放も含めた138項目を確認する。完了時にテストウィンドウを閉じ、元のウィンドウを前面に戻す。ほかの Alt リマップを終了してから実行する。
 
-検証結果: AutoHotkey v2 の64bit版 / 32bit版で通常テスト132項目、64bit版でデスクトップテスト138項目が成功。実際の物理キーボードの打鍵タイミングや各アプリの IME 動作は試用で確認が必要。
+検証結果: AutoHotkey v2 の64bit版 / 32bit版で通常テスト132項目、64bit版でデスクトップテスト138項目が成功。実際の物理キーボードの打鍵タイミングや各アプリの IME 動作は、使って確認が必要。
 
 ## 元プロジェクト
 
