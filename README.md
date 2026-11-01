@@ -1,58 +1,64 @@
-# alt-ime-ahk-v2f-menusafe
+# alt-ime-ahk-v2f-menusafe — Deferred Alt 試用版
 
-[ryobeam/alt-ime-ahk-v2f](https://github.com/ryobeam/alt-ime-ahk-v2f) のフォーク。Alt 空打ちで IME を切り替える際、Outlook のリボン / VS Code のメニューバー / CATIA V5 のアクセスキー / メモ帳のメニューバーといった「Alt 単独タップでメニューに奪われる」挙動を回避する。
+左右 Alt の単押しで IME OFF / ON、組み合わせでは通常の Alt として動作する AutoHotkey v2 スクリプト。
 
-## 概要
+Alt 押下を保留し、単押しなら Alt をアプリへ一切送らない。F24 / ダミーキーによるメニュー抑制を廃止した。
+Karabiner-Elements の [`to.lazy`](https://karabiner-elements.pqrs.org/docs/json/complex-modifications-manipulator-definition/to/lazy/) と [`to_if_alone`](https://karabiner-elements.pqrs.org/docs/json/complex-modifications-manipulator-definition/to-if-alone/) を参考にしている。Karabiner の全仕様やドライバーを移植したものではない。
 
-左右 Alt キーの空打ちで IME を OFF/ON する AutoHotKey スクリプト。
+## 試し方
 
-* 左 Alt キーの空打ちで IME を「英数」に切り替え
-* 右 Alt キーの空打ちで IME を「かな」に切り替え
-* Alt キーを押している間に他のキーを打つと通常の Alt キーとして動作
+1. 現在起動中の旧 alt-ime / 他の Alt リマップスクリプトを、タスクトレイから終了する。同時起動しない。
+2. このフォルダーの `alt-ime-ahk-v2f-menusafe.ahk` を AutoHotkey v2 で起動する。`DeferredAltCore.ahk` も同じフォルダーに置く。
+3. 下記の操作を確認する。試用中はスタートアップを変更する必要はない。
 
-## 動作環境
+| 操作 | 動作 |
+| --- | --- |
+| 左 Alt を単押しして離す | IME OFF。Alt は送らない |
+| 右 Alt を単押しして離す | IME ON。Alt は送らない |
+| Alt を押したまま別のキーを押す | Alt 押下を相手キーの直前に送り、Alt を離すまで保持 |
+| Alt を押したままクリック / スクロール | Alt とマウスの組み合わせとして送出。IME は変更しない |
+| ポインターの移動だけ | 単押し判定を維持 |
+| Ctrl / Shift / Win を先に押してから Alt | 元の物理 Alt を通す。IME は変更しない |
+| リモートデスクトップ mstsc.exe 上で Alt を押す | 元の Alt を通す。IME は変更しない |
+| Alt だけを1秒より長く押して離す | 何もしない。メニューも起動しない |
 
-* Windows 10 / 11
-* AutoHotkey v2
+単押しの上限はスクリプト先頭の `AloneTimeoutMs := 1000` で変更できる。`0` で時間制限なし。時間が経過しても、それだけで Alt を送ることはない。
 
-## 上流(ryobeam/alt-ime-ahk-v2f)からの差分
+終了するときはトレイの **終了（元のAlt動作に戻す）** を選ぶ。旧版に戻すには、この試用版を終了してから旧版を起動する。試用版はシステム設定、レジストリ、スタートアップを書き換えない。
 
-上流は Alt 押下直後に `vkFF` をダミー送出して上部メニュー起動を抑制していたが、`vkFF` を未認識のキーとして無視するアプリ（Outlook 等）でリボンが立ち上がってしまう問題があった。本フォークでは以下のように挙動を変更している。
+## 確認してほしい操作
 
-### 1. Office 系（Alt up タイミング）
+- メモ帳 / Outlook / VS Code / CATIA などで、左右 Alt の単押しでメニューにフォーカスが移らず、IME が切り替わる。
+- Alt+Tab を一度押す、Alt を押したまま Tab を複数回押す、Alt+Shift+Tab、最後に Alt を離して確定する。
+- Alt+F4 は保存不要のテスト用ウィンドウで確認する。Alt+Space、Alt+文字、Alt+クリックも普段のアプリで確認する。
+- Alt を離す前に次の文字を押した場合は Alt ショートカットになる。単押しによる IME 切替は Alt を離した時点で確定する。
+- ウィンドウ切替後に Tab や文字を単独で押し、Alt が押しっぱなしになっていない。
 
-`LAlt up::` / `RAlt up::` 側でダミー(`F24`)を送る方式に変更。AHK が Alt up を握りつぶしている間に `F24` を注入することで、OS には「Alt + F24 のキーコンボ」に見え、Outlook の「Alt 単独タップでリボン起動」条件が成立しなくなる。`F24` は実在の VK だがどのアプリでも既定の割り当てがなく副作用がない。
+## 制約
 
-`vk07` ではなく `F24` を使う理由: `vk07` / `vkFF` は Office 系がキーとして認識せず素通りするため。
+- 通常権限のプロセスから管理者権限のアプリへ入力を注入することは Windows の UIPI により制限される。管理者アプリでも使う場合は、インストール済みの UIAccess 版 AHK または同等の権限で実行して確認する。
+- 入力送出に失敗した場合はフックを解除して停止し、トレイ通知を出す。再開にはスクリプトを起動し直す。
+- Ctrl+Alt+Del のようなセキュアな操作は通常の入力注入では再現できない。Ctrl を先に押す組み合わせは物理 Alt をそのまま通す。セキュアデスクトップ自体は対象外。
+- ゲーム、Raw Input、他のキーフックとの併用、mstsc 以外のリモート接続クライアントは未検証。
+- IME 操作は従来の `IMEv2.ahk` と同じ `WM_IME_CONTROL / IMC_SETOPENSTATUS` 方式。64-bit HWND を正しく扱い、応答待ちは50msに制限した。各アプリと IME の対応は試用で確認が必要。
 
-### 2. レガシー Win32 系（Alt down タイミング）
+## 実装とテスト
 
-メモ帳 (`notepad.exe`) や CATIA V5 (`CNEXT.exe`) のような旧 Win32 系アプリは Alt 押下時点でアクセスキー入力モード/メニューバーフォーカスに入るため、Alt up タイミングの抑止では間に合わない。`*~LAlt::` / `*~RAlt::` で Alt down 直後にも `F24` を全アプリ共通で先制注入することで対処する。`F24` はどのアプリでも既定の割り当てが無いため副作用なし。
+`DeferredAltCore.ahk` が単押し / 組み合わせの状態を管理し、メインスクリプトが `WH_KEYBOARD_LL` / `WH_MOUSE_LL` で入出力を処理する。最初の相手キーまたはマウス操作をいったん止め、Alt 押下と同じ `SendInput` バッチで再送して順序を保証する。後続のキーはそのまま通し、Alt 解放だけを対応して送る。IME 操作やファイル書き込みのためにフック内で長時間待機しない。
 
-### 3. VS Code
-
-VS Code (Electron) は Alt 押下時点でメニューバーがフォーカスを奪う。AHK 側ではタイミング的に間に合わないため、VS Code 側の `settings.json` で対処することを推奨する。
-
-```json
-{
-    "window.customMenuBarAltFocus": false,
-    "window.enableMenuBarMnemonics": false
-}
+```powershell
+& 'C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe' /ErrorStdOut .\tests\run.ahk
 ```
 
-## 使用方法
+通常テストは132項目。左右単押し、タイムアウト、Alt+Tab相当の複数回入力、解放順序、修飾キー、拡張キー、マウス併用の状態、終了処理などを確認する。Windows フックの結合テストは、テスト専用タグ付き入力と F23 を使い、Alt が消費されることと再送順序を確認する。IME 操作はテスト内で記録に置き換える。
 
-```sh
-git clone https://github.com/ojimpo/alt-ime-ahk-v2f-menusafe.git
-```
+`tests/run.ahk --desktop` を指定すると、一時的なテスト用ウィンドウ3つを開き、左右 Alt+Tab の連続切替、Alt+Shift+Tab の逆方向切替、Alt 解放も含めた138項目を確認する。完了時にテストウィンドウを閉じ、元のウィンドウを前面に戻す。ほかの Alt リマップを終了してから実行する。
 
-任意の場所に展開し、AutoHotkey v2 がインストールされた状態で `alt-ime-ahk-v2f-menusafe.ahk` をダブルクリックするとタスクトレイに常駐する。
+検証結果: AutoHotkey v2 の64bit版 / 32bit版で通常テスト132項目、64bit版でデスクトップテスト138項目が成功。実際の物理キーボードの打鍵タイミングや各アプリの IME 動作は試用で確認が必要。
 
-スタートアップ起動は Windows のスタートアップフォルダ(`shell:startup`)に `AutoHotkey64.exe` を target、`.ahk` のパスを argument にしたショートカットを置く。
+## 元プロジェクト
 
-終了する場合はタスクトレイのアイコンを右クリックし、「Exit」をクリック。
+- [ryobeam/alt-ime-ahk-v2f](https://github.com/ryobeam/alt-ime-ahk-v2f)
+- [karakaram/alt-ime-ahk](https://github.com/karakaram/alt-ime-ahk)
 
-## 参考
-
-* [Altの空打ちで日本語入力(IME)を切り替えるツールを作った](http://www.karakaram.com/alt-ime-on-off/)
-* [Autohotkey v2.0のIME制御用 関数群 IMEv2.ahk](https://qiita.com/kenichiro_ayaki/items/d55005df2787da725c6f)
+`IMEv2.ahk` は来歴を保つため残している。この版のメインスクリプトからは読み込まない。
