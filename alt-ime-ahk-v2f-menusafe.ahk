@@ -29,9 +29,114 @@ class DeferredAltApp {
         this.MouseCallback := 0
         this.Tag := 0x41494D45
         this.Failed := false
+        this.KbCount := 0
+        this.MouseCount := 0
+        this.LastInput := 0
+        this.LastTotal := 0
+        this.Suspect := 0
+        this.Ticks := 0
+        this.Reinstalls := 0
+        this.LogBuf := []
+        this.LogFile := A_ScriptDir "\alt-ime.log"
+        this.Watching := false
         for vk in [0xA0, 0xA1, 0xA2, 0xA3, 0x5B, 0x5C]
             if (DllCall("GetAsyncKeyState", "Int", vk, "Short") & 0x8000)
                 this.Core.Held[vk] := true
+    }
+
+    ; Append-only diagnostics. Never records which keys were typed: only
+    ; modifier state anomalies, hook restarts and session events.
+    Log(msg) {
+        this.LogBuf.Push(FormatTime(, "yyyy-MM-dd HH:mm:ss") " " msg)
+        SetTimer(ObjBindMethod(this, "FlushLog"), -50)
+    }
+
+    FlushLog() {
+        if !this.LogBuf.Length
+            return
+        text := ""
+        for line in this.LogBuf
+            text .= line "`n"
+        this.LogBuf := []
+        try {
+            if (FileExist(this.LogFile) && FileGetSize(this.LogFile) > 262144)
+                FileMove(this.LogFile, this.LogFile ".1", true)
+            FileAppend(text, this.LogFile, "UTF-8")
+        }
+    }
+
+    ; Overridden by tests, whose synthetic input never updates the real state.
+    IsDown(vk) {
+        return !!(DllCall("GetAsyncKeyState", "Int", vk, "Short") & 0x8000)
+    }
+
+    ; Forget modifiers/keys whose release we never saw (lock screen, UAC,
+    ; a hook timeout). A stale entry makes every later Alt look like a chord
+    ; with a held modifier, so Alt+Tab works but a lone Alt never switches IME.
+    ; Alt itself is not checked: this hook swallows it, so the OS reports it up.
+    PruneHeld(why) {
+        stale := []
+        for vk in this.Core.Held
+            if !this.IsDown(vk)
+                stale.Push(vk)
+        for vk in stale {
+            this.Core.Held.Delete(vk)
+            this.Log("stale Held vk=0x" Format("{:X}", vk) " dropped (" why ")")
+        }
+    }
+
+    OnSession(wParam, lParam, msg, hwnd) {
+        names := Map(1, "console-connect", 2, "console-disconnect", 3, "remote-connect",
+            4, "remote-disconnect", 5, "logon", 6, "logoff", 7, "lock", 8, "unlock")
+        this.Log("session " (names.Has(wParam) ? names[wParam] : wParam))
+        if (wParam = 7 || wParam = 8) {
+            try this.SendKeys(this.Core.ReleaseAll())
+            this.Core.Held.Clear()
+            for vk in [0xA0, 0xA1, 0xA2, 0xA3, 0x5B, 0x5C]
+                if this.IsDown(vk)
+                    this.Core.Held[vk] := true
+        }
+    }
+
+    ; Windows silently removes a low-level hook that answers too slowly.
+    ; Detect "input is arriving but neither hook is called" and reinstall.
+    WatchHooks() {
+        if this.Failed
+            return
+        this.Ticks++
+        if (Mod(this.Ticks, 720) = 0)
+            this.Log("alive kb=" this.KbCount " mouse=" this.MouseCount " reinstalls=" this.Reinstalls)
+        if (!this.KeyboardHook || !this.MouseHook) {
+            this.Reinstall("hook missing")
+            return
+        }
+        li := Buffer(8, 0)
+        NumPut("UInt", 8, li)
+        DllCall("GetLastInputInfo", "Ptr", li)
+        t := NumGet(li, 4, "UInt")
+        total := this.KbCount + this.MouseCount
+        if (this.LastInput && t != this.LastInput && total = this.LastTotal)
+            this.Suspect++
+        else
+            this.Suspect := 0
+        this.LastInput := t
+        this.LastTotal := total
+        ; Two consecutive samples: a hook call may merely be queued behind this timer.
+        if (this.Suspect >= 2) {
+            this.Suspect := 0
+            this.Reinstall("input without hook calls")
+        }
+    }
+
+    Reinstall(why) {
+        this.Reinstalls++
+        this.Log("hooks reinstalled #" this.Reinstalls " (" why ")")
+        this.Stop()
+        try {
+            this.Start()
+        } catch as e {
+            this.Log("reinstall failed: " e.Message " lastError=" A_LastError)
+        }
     }
 
     Start() {
@@ -47,6 +152,18 @@ class DeferredAltApp {
             this.Stop()
             throw OSError(lastError, "SetWindowsHookEx")
         }
+        this.LastTotal := this.KbCount + this.MouseCount
+        this.Suspect := 0
+        if !this.Watching {
+            this.Watching := true
+            this.Log("started pid=" ProcessExist() " ahk=" A_AhkVersion " timeout=" this.Core.Timeout)
+            SetTimer(ObjBindMethod(this, "WatchHooks"), 5000)
+            try {
+                this.SessionGui := Gui()
+                DllCall("wtsapi32\WTSRegisterSessionNotification", "Ptr", this.SessionGui.Hwnd, "UInt", 0)
+                OnMessage(0x2B1, ObjBindMethod(this, "OnSession"))
+            }
+        }
     }
 
     Next(code, msg, p) {
@@ -55,6 +172,7 @@ class DeferredAltApp {
     }
 
     Keyboard(code, msg, p) {
+        this.KbCount++
         if (code < 0 || this.Failed)
             return this.Next(code, msg, p)
         llFlags := NumGet(p, 8, "UInt")
@@ -68,6 +186,12 @@ class DeferredAltApp {
         flags := (llFlags & 1) | ((llFlags & 0x80) ? 2 : 0)
         try {
             bypass := false
+            if ((vk = 0xA4 || vk = 0xA5) && !(flags & 2)) {
+                if this.Core.Alt.Has(vk)
+                    if (A_TickCount - this.Core.Alt[vk].start > 5000)
+                        this.Log("Alt down while its entry is " (A_TickCount - this.Core.Alt[vk].start) "ms old (lost Alt-up?)")
+                this.PruneHeld("Alt down")
+            }
             if ((vk = 0xA4 || vk = 0xA5) && !(flags & 2) && !this.Core.Alt.Has(vk)) {
                 bypass := !!WinActive("ahk_exe mstsc.exe")
                 ; Preserve Alt pressed during an existing mouse drag.
@@ -82,14 +206,15 @@ class DeferredAltApp {
                 this.SetIME(r.ime)
             if r.block
                 return 1
-        } catch {
+        } catch as e {
             ; Never display a blocking error dialog inside the hook.
-            this.Fail()
+            this.Fail(e)
         }
         return this.Next(code, msg, p)
     }
 
     Mouse(code, msg, p) {
+        this.MouseCount++
         if (code < 0 || this.Failed || !this.Core.Alt.Count)
             return this.Next(code, msg, p)
         if (NumGet(p, 12, "UInt") & 1)
@@ -112,8 +237,8 @@ class DeferredAltApp {
                 this.SendKeys(keys, {flags: mouseFlags[msg], data: data})
                 return 1
             }
-        } catch {
-            this.Fail()
+        } catch as e {
+            this.Fail(e)
         }
         return this.Next(code, msg, p)
     }
@@ -139,7 +264,7 @@ class DeferredAltApp {
         }
         sent := DllCall("SendInput", "UInt", count, "Ptr", packet, "Int", size, "UInt")
         if (sent != count)
-            throw Error("SendInput failed; remapping stopped (possible privilege mismatch).")
+            throw Error("SendInput failed (sent " sent "/" count ", lastError " A_LastError "); remapping stopped (possible privilege mismatch).")
     }
 
     SetIME(enabled) {
@@ -158,10 +283,11 @@ class DeferredAltApp {
                 "UPtr", 6, "Ptr", enabled, "UInt", 2, "UInt", 50, "Ptr", 0, "Ptr")
     }
 
-    Fail() {
+    Fail(e := "") {
         if this.Failed
             return
         this.Failed := true
+        this.Log("FAILED: " (IsObject(e) ? e.Message : "unknown") " lastError=" A_LastError)
         try this.SendKeys(this.Core.ReleaseAll())
         SetTimer(ObjBindMethod(this, "ReportFailure"), -1)
     }
@@ -173,6 +299,7 @@ class DeferredAltApp {
     }
 
     Stop(*) {
+        this.FlushLog()
         if this.KeyboardHook {
             DllCall("UnhookWindowsHookEx", "Ptr", this.KeyboardHook)
             this.KeyboardHook := 0

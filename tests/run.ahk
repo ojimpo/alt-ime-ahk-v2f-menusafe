@@ -132,6 +132,10 @@ class TestApp extends DeferredAltApp {
     SetIME(enabled) {
         this.IMEs.Push(enabled)
     }
+    ; Synthetic input never updates the real key state, so trust the Core.
+    IsDown(vk) {
+        return true
+    }
 }
 
 Observe(code, msg, p) {
