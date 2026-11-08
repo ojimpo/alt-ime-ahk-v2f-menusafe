@@ -11,7 +11,7 @@ if (A_LineFile = A_ScriptFullPath) {
         ExitApp(0)
     Persistent()
     app := DeferredAltApp(AloneTimeoutMs)
-    OnExit(ObjBindMethod(app, "Stop"))
+    app.RegisterDiagnostics()
     A_IconTip := "Alt IME — deferred Alt"
     A_TrayMenu.Delete()
     A_TrayMenu.Add("Deferred Alt (左右Alt単押しでIME切替)", (*) => 0)
@@ -39,9 +39,50 @@ class DeferredAltApp {
         this.LogBuf := []
         this.LogFile := A_ScriptDir "\alt-ime.log"
         this.Watching := false
+        this.StartedAt := A_TickCount
         for vk in [0xA0, 0xA1, 0xA2, 0xA3, 0x5B, 0x5C]
             if (DllCall("GetAsyncKeyState", "Int", vk, "Short") & 0x8000)
                 this.Core.Held[vk] := true
+    }
+
+    RegisterDiagnostics() {
+        OnExit(ObjBindMethod(this, "HandleExit"))
+        OnError(ObjBindMethod(this, "HandleError"))
+    }
+
+    ; Log before cleanup resets the state. Flush synchronously: timers will
+    ; not get another turn once the process exits.
+    HandleExit(reason, code) {
+        try this.Log("exiting pid=" ProcessExist() " reason=" reason " code=" code
+            " uptimeMs=" (A_TickCount - this.StartedAt) " failed=" this.Failed
+            " keyboardHook=" (!!this.KeyboardHook) " mouseHook=" (!!this.MouseHook)
+            " kb=" this.KbCount " mouse=" this.MouseCount
+            " reinstalls=" this.Reinstalls " altCount=" this.Core.Alt.Count
+            " heldCount=" this.Core.Held.Count)
+        try this.FlushLog()
+        try {
+            this.Stop()
+        } catch as e {
+            try this.Log("exit cleanup error: " this.ErrorDetails(e))
+        }
+        try this.FlushLog()
+        return 0
+    }
+
+    ErrorDetails(e) {
+        if !IsObject(e)
+            return "non-object exception"
+        return StrReplace(StrReplace(Type(e) ": " e.Message " file=" e.File
+            " line=" e.Line " stack=" e.Stack, "`r", ""), "`n", " | ")
+    }
+
+    HandleError(e, mode) {
+        try {
+            this.Log("unhandled error pid=" ProcessExist() " mode=" mode " " this.ErrorDetails(e))
+            this.FlushLog()
+        }
+        ; Preserve AutoHotkey's normal error reporting and exit behavior.
+        return 0
     }
 
     ; Append-only diagnostics. Never records which keys were typed: only
