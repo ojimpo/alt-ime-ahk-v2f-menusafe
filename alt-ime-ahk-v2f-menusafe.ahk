@@ -308,47 +308,15 @@ class DeferredAltApp {
             throw Error("SendInput failed (sent " sent "/" count ", lastError " A_LastError "); remapping stopped (possible privilege mismatch).")
     }
 
+    ; Same effect as the Mac Eisu / Kana keys: explicit IME OFF / ON, not a
+    ; toggle. VK_IME_ON/OFF are idempotent, so no state has to be read (many
+    ; apps -- Chromium/Electron, Notepad, Outlook -- report a stale state and
+    ; ignore WM_IME_CONTROL). No F24, Alt or toggle shortcut is sent.
     SetIME(enabled) {
-        ; Same WM_IME_CONTROL mechanism as IMEv2.ahk, with pointer-sized HWNDs
-        ; and a bounded timeout. WM_IME_CONTROL first; VK_IME_ON/OFF only as a
-        ; fallback for windows that ignore it. No F24, Alt or toggle shortcut.
-        hwnd := DllCall("GetForegroundWindow", "Ptr")
-        tid := DllCall("GetWindowThreadProcessId", "Ptr", hwnd, "Ptr", 0, "UInt")
-        info := Buffer(8 + 6 * A_PtrSize + 16, 0)
-        NumPut("UInt", info.Size, info)
-        if DllCall("GetGUIThreadInfo", "UInt", tid, "Ptr", info)
-            if (focus := NumGet(info, 8 + A_PtrSize, "Ptr"))
-                hwnd := focus
-        ime := DllCall("imm32\ImmGetDefaultIMEWnd", "Ptr", hwnd, "Ptr")
-        stuck := !ime
-        if ime {
-            DllCall("SendMessageTimeout", "Ptr", ime, "UInt", 0x283,
-                "UPtr", 6, "Ptr", enabled, "UInt", 2, "UInt", 50, "Ptr", 0, "Ptr")
-            ; Chromium/Electron (VS Code, Chrome, Teams...) accept the message
-            ; and return success but never change their IME state, and report
-            ; a stale state, so a read-back cannot be trusted there.
-            cls := Buffer(512)
-            DllCall("GetClassNameW", "Ptr", hwnd, "Ptr", cls, "Int", 256)
-            if DeferredAltApp.ImeNeedsKeys(StrGet(cls, "UTF-16")) {
-                stuck := true
-            } else {
-                got := 0
-                if DllCall("SendMessageTimeout", "Ptr", ime, "UInt", 0x283,
-                    "UPtr", 5, "Ptr", 0, "UInt", 2, "UInt", 50, "PtrP", &got, "Ptr")
-                    stuck := (got != enabled)
-            }
-        }
-        if stuck {
-            ; Idempotent VK_IME_ON/OFF: harmless if the state already matches.
-            try
-                this.SendKeys(DeferredAltApp.ImeKeys(enabled))
-            catch
-                this.Log("IME key fallback failed lastError=" A_LastError)
-        }
-    }
-
-    static ImeNeedsKeys(cls) {
-        return !!RegExMatch(cls, "i)^Chrome_(WidgetWin|RenderWidgetHostHWND)")
+        try
+            this.SendKeys(DeferredAltApp.ImeKeys(enabled))
+        catch
+            this.Log("IME key send failed lastError=" A_LastError)
     }
 
     static ImeKeys(enabled) {

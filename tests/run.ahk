@@ -6,7 +6,7 @@ Observed := []
 try {
     TestTap()
     TestChords()
-    TestImeFallback()
+    TestImeKeys()
     TestLifecycle()
     TestNativeHooks()
     FileAppend("PASS: " Checks " assertions (state machine + Windows hook integration)`n", "*")
@@ -50,10 +50,7 @@ TestTap() {
     Assert(Event(c, 0xA4, true, 60000).ime = 0, "timeout can be disabled")
 }
 
-TestImeFallback() {
-    Assert(DeferredAltApp.ImeNeedsKeys("Chrome_WidgetWin_1"), "VS Code/Electron needs key fallback")
-    Assert(DeferredAltApp.ImeNeedsKeys("Chrome_RenderWidgetHostHWND"), "Chromium render widget needs key fallback")
-    Assert(!DeferredAltApp.ImeNeedsKeys("Notepad") && !DeferredAltApp.ImeNeedsKeys("Edit"), "classic windows keep WM_IME_CONTROL only")
+TestImeKeys() {
     on := DeferredAltApp.ImeKeys(1)
     off := DeferredAltApp.ImeKeys(0)
     Assert(on.Length = 2 && on[1].vk = 0x16 && on[1].flags = 0 && on[2].flags = 2, "IME on = VK_IME_ON down/up")
