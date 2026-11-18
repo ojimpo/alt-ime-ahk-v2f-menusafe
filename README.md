@@ -80,6 +80,7 @@ ZIP を展開した場合、ファイルに Mark of the Web が付き、Smart Ap
 - Ctrl+Alt+Del のようなセキュアな操作は通常の入力注入では再現できない。Ctrl を先に押す組み合わせは物理 Alt をそのまま通す。セキュアデスクトップ自体は対象外。
 - ゲーム、Raw Input、他のキーフックとの併用、mstsc 以外のリモート接続クライアントは未検証。
 - IME 操作は従来の `IMEv2.ahk` と同じ `WM_IME_CONTROL / IMC_SETOPENSTATUS` 方式。64-bit HWND を正しく扱い、応答待ちは50msに制限した。各アプリと IME の対応は実際に使って確認が必要。
+- Chromium / Electron 系のウィンドウ(VS Code、Chrome、Teams など)は `WM_IME_CONTROL` を受け付けても IME の状態を変えず、読み戻した状態も当てにならない。そのためクラス名が `Chrome_WidgetWin*` / `Chrome_RenderWidgetHostHWND` のウィンドウには、`WM_IME_CONTROL` に加えて `VK_IME_ON` / `VK_IME_OFF` を `SendInput` で送る。それ以外のウィンドウは `WM_IME_CONTROL` の後で状態を読み戻し、指定と違うときだけ同じキーを送る。`VK_IME_ON/OFF` は何度送っても結果が同じなので、すでに状態が合っていても害はない。
 
 ## 実装とテスト
 
